@@ -15,7 +15,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
-const RELAY_DIR   = path.join(os.homedir(), ".switchboard");
+const RELAY_DIR   = process.env.SWITCHBOARD_DATA_DIR ?? path.join(os.homedir(), ".switchboard");
 const MSG_FILE    = path.join(RELAY_DIR, "messages.json");
 const LOCK_FILE   = path.join(RELAY_DIR, "messages.lock");
 const NAMED_LOCKS = path.join(RELAY_DIR, "locks.json");
