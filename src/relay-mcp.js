@@ -3,7 +3,7 @@
  * Claude Code Relay — MCP server v2
  *
  * Tools: send_message, broadcast, read_messages, wait_for_message,
- *        relay_status, clear_relay,
+ *        relay_status, list_sessions, clear_relay,
  *        acquire_lock, release_lock, list_locks,
  *        read_history
  */
@@ -252,6 +252,38 @@ server.tool(
       }
     }
     return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+);
+
+server.tool(
+  "list_sessions",
+  "List all registered agent sessions with their working directory and status.",
+  {},
+  async () => {
+    const SESSIONS_FILE = path.join(RELAY_DIR, "sessions.json");
+    try {
+      if (!fs.existsSync(SESSIONS_FILE)) {
+        return { content: [{ type: "text", text: "No sessions registered yet." }] };
+      }
+      const sessions = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
+      if (Object.keys(sessions).length === 0) {
+        return { content: [{ type: "text", text: "No sessions registered yet." }] };
+      }
+      const lines = [];
+      for (const [agentId, info] of Object.entries(sessions)) {
+        const alive = (() => { try { process.kill(info.pid, 0); return true; } catch { return false; } })();
+        const status = alive ? "ACTIVE" : "STALE";
+        const age = Math.round((Date.now() - new Date(info.startedAt).getTime()) / 1000 / 60);
+        const ageStr = age < 60 ? `${age}m ago` : `${Math.round(age/60)}h ago`;
+        lines.push(`${agentId.padEnd(24)} ${status.padEnd(8)} started ${ageStr}`);
+        lines.push(`  cwd: ${info.cwd}`);
+        lines.push(`  pid: ${info.pid}${alive ? "" : " (no longer alive)"}`);
+        lines.push("");
+      }
+      return { content: [{ type: "text", text: lines.join("\n").trimEnd() }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error reading sessions: ${e.message}` }] };
+    }
   }
 );
 
