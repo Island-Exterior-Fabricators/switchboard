@@ -14,6 +14,8 @@ Three components work together:
 
 **Data directory:** `~/.switchboard/` (Linux/macOS) or `%USERPROFILE%\.switchboard\` (Windows)
 
+The data directory is configurable via the `SWITCHBOARD_DATA_DIR` environment variable. Set this on both the relay MCP server and the channel server when the default path is not suitable — for example, when bridging the Windows/WSL filesystem boundary. See the WSL + Windows section under Setup for details.
+
 The stop hook fires when a session ends a turn. If a session is completely idle, no turns end and messages pile up undelivered. The channel server solves this: it watches `messages.json` and pushes a notification into the idle session the moment a message arrives, waking it up without operator intervention.
 
 ## Project Structure
@@ -165,6 +167,36 @@ claude mcp list
 claude mcp list
 # should show both: switchboard, switchboard-channel
 ```
+
+### WSL + Windows
+
+Claude Desktop runs on Windows. If your Claude Code sessions run in WSL, two processes must share the same `messages.json` across different filesystems. The default `~/.switchboard` path resolves differently in each environment and must be configured explicitly on both sides.
+
+**Step 1 — Configure the relay MCP server in Claude Desktop (Windows side).**
+
+When registering the MCP server, set `SWITCHBOARD_DATA_DIR` to the WSL Linux home path using Windows UNC notation:
+
+```
+\\wsl$\<distro>\home\<user>\.switchboard
+```
+
+Replace `<distro>` with your WSL distribution name (e.g., `Ubuntu`) and `<user>` with your Linux username. This tells the relay server to write `messages.json` directly into the WSL filesystem.
+
+**Step 2 — Set `SWITCHBOARD_DATA_DIR` in WSL sessions.**
+
+In any WSL Claude Code session that uses the Switchboard, set the environment variable before launching:
+
+```bash
+export SWITCHBOARD_DATA_DIR=/home/<user>/.switchboard
+export RELAY_AGENT_ID=<agent-name>
+claude
+```
+
+Or add `SWITCHBOARD_DATA_DIR` to your `.bashrc` / `.zshrc` so it is always set.
+
+**Warning: do NOT use `/mnt/c/` paths for `SWITCHBOARD_DATA_DIR` in WSL.**
+
+The relay uses polling for cross-filesystem portability, but `/mnt/c/` paths use DrvFs which does not reliably surface file modification events and can cause the relay to read stale data. The `\\wsl$\` + `/home/<user>/` path pair routes all I/O through the native Linux ext4 filesystem, which is reliable.
 
 ## Agent Naming
 
@@ -336,6 +368,27 @@ See pending message counts and all currently held locks.
 ```
 relay_status()
 ```
+
+### list_sessions
+
+List all registered agent sessions with their working directory, PID, and status (ACTIVE or STALE).
+
+```
+list_sessions()
+```
+
+Example output:
+```
+lorekeeper-fabric        ACTIVE   started 12m ago
+  cwd: /home/user/projects/island-dev-knowledge
+  pid: 4821
+
+lore-architect           STALE    started 2h ago
+  cwd: /home/user/projects/other-project
+  pid: 3100 (no longer alive)
+```
+
+STALE sessions are those whose PID no longer exists. They are automatically cleaned up when a new session starts with the same agent name.
 
 ### clear_relay
 
